@@ -1,0 +1,56 @@
+{
+  "name": "biodao-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for BioDAO to monitor channels and store updates in Supabase",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && tsc-alias",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "dev:watch": "nodemon --exec ts-node src/index.ts",
+    "format": "prettier --write src/**/*.ts",
+    "test": "jest",
+    "clean": "rimraf dist",
+    "deploy": "npm run clean && npm run build && npm start"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "typescript",
+    "supabase",
+    "biodao"
+  ],
+  "author": "BioDAO Team",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "cors": "^2.8.5",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "helmet": "^7.1.0",
+    "node-cron": "^3.0.3",
+    "rate-limiter-flexible": "^5.0.5",
+    "tsconfig-paths": "^4.2.0",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.8",
+    "@types/node": "^20.10.6",
+    "@types/node-cron": "^3.0.11",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2",
+    "prettier": "^3.1.1",
+    "rimraf": "^5.0.5",
+    "ts-jest": "^29.1.1",
+    "ts-node": "^10.9.2",
+    "tsc-alias": "^1.8.16",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}
