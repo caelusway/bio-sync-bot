@@ -29,23 +29,79 @@ export class DatabaseService {
 
   async saveMessage(message: Omit<DiscordMessage, 'created_at' | 'updated_at'>): Promise<ServiceResponse<DiscordMessage>> {
     try {
-      const { data, error } = await this.supabase
+      // First, try to check if the message already exists
+      const { data: existingMessage } = await this.supabase
         .from('discord_messages')
-        .insert([{
-          ...message,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }])
-        .select()
+        .select('id, created_at')
+        .eq('id', message.id)
         .single();
 
-      if (error) {
-        logger.error('Failed to save message:', error);
-        return { success: false, error: error.message, code: error.code };
-      }
+      const now = new Date().toISOString();
+      
+      if (existingMessage) {
+        // Message exists, update it while preserving created_at
+        const { data, error } = await this.supabase
+          .from('discord_messages')
+          .update({
+            ...message,
+            created_at: existingMessage.created_at, // Preserve original created_at
+            updated_at: now
+          })
+          .eq('id', message.id)
+          .select()
+          .single();
 
-      logger.debug(`Message saved successfully: ${data.id}`);
-      return { success: true, data };
+        if (error) {
+          logger.error('Failed to update existing message:', error);
+          return { success: false, error: error.message, code: error.code };
+        }
+
+        logger.debug(`Message updated successfully: ${data.id}`);
+        return { success: true, data };
+      } else {
+        // Message doesn't exist, insert it
+        const { data, error } = await this.supabase
+          .from('discord_messages')
+          .insert([{
+            ...message,
+            created_at: now,
+            updated_at: now
+          }])
+          .select()
+          .single();
+
+        if (error) {
+          // Handle race condition where message might have been inserted between our check and insert
+          if (error.code === '23505') { // Unique constraint violation
+            logger.warn(`Message ${message.id} was inserted by another process, attempting update...`);
+            
+            // Try to update instead
+            const { data: updateData, error: updateError } = await this.supabase
+              .from('discord_messages')
+              .update({
+                ...message,
+                updated_at: now
+              })
+              .eq('id', message.id)
+              .select()
+              .single();
+
+            if (updateError) {
+              logger.error('Failed to update message after race condition:', updateError);
+              return { success: false, error: updateError.message, code: updateError.code };
+            }
+
+            logger.debug(`Message updated after race condition: ${updateData.id}`);
+            return { success: true, data: updateData };
+          }
+          
+          logger.error('Failed to insert new message:', error);
+          return { success: false, error: error.message, code: error.code };
+        }
+
+        logger.debug(`Message inserted successfully: ${data.id}`);
+        return { success: true, data };
+      }
     } catch (error) {
       logger.error('Unexpected error saving message:', error);
       return { success: false, error: 'Unexpected error occurred' };

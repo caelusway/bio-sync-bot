@@ -7,6 +7,7 @@ import { botConfig } from '@/config/bot';
 import { logger } from '@/utils/logger';
 import { databaseService } from '@/services/database';
 import { discordService } from '@/services/discord';
+import { discordRateLimiter } from '@/utils/discordRateLimit';
 
 export class Server {
   private app: express.Application;
@@ -149,6 +150,31 @@ export class Server {
       } catch (error) {
         logger.error('Failed to get user activity:', error);
         res.status(500).json({ error: 'Failed to get user activity' });
+      }
+    });
+
+    // Discord Rate Limiting Status
+    this.app.get('/api/rate-limit/status', async (_req, res) => {
+      try {
+        const status = discordRateLimiter.getRateLimitStatus();
+        res.json({ 
+          success: true, 
+          status: status,
+          message: 'Discord API rate limiting is active',
+          info: {
+            description: 'Rate limiting prevents Discord API ban',
+            currentRequests: status.requestsInLastSecond,
+            maxRequests: status.config.requestsPerSecond,
+            utilizationPercent: Math.round((status.requestsInLastSecond / status.config.requestsPerSecond) * 100),
+            safetyStatus: status.requestsInLastSecond < status.config.requestsPerSecond * 0.8 ? 'SAFE' : 'BUSY'
+          }
+        });
+      } catch (error) {
+        logger.error('Failed to get rate limit status:', error);
+        res.status(500).json({ 
+          success: false, 
+          error: 'Failed to get rate limit status' 
+        });
       }
     });
 

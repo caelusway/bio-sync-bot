@@ -3,6 +3,7 @@ import { DiscordMessage, ChannelConfig, CategoryConfig, MessageAttachment, Messa
 import { botConfig, getCategoryFromCategoryName, getCategoryFromChannelName, shouldIncludeChannel } from '@/config/bot';
 import { databaseService } from './database';
 import { logger } from '@/utils/logger';
+import { discordRateLimiter } from '@/utils/discordRateLimit';
 
 export class DiscordService {
   private client: Client;
@@ -115,8 +116,17 @@ export class DiscordService {
 
   private async discoverAndConfigureChannels(): Promise<void> {
     try {
-      const guild = await this.client.guilds.fetch(botConfig.discord.guildId);
-      const channels = await guild.channels.fetch();
+      logger.info('🔍 Discovering and configuring channels with rate limiting...');
+      
+      const guild = await discordRateLimiter.executeWithRetry(
+        () => this.client.guilds.fetch(botConfig.discord.guildId),
+        'fetch guild for discovery'
+      ) as any;
+      
+      const channels = await discordRateLimiter.executeWithRetry(
+        () => guild.channels.fetch(),
+        'fetch channels for discovery'
+      ) as any;
 
       // Clear existing channel configs
       this.channelConfigs.clear();
@@ -138,7 +148,7 @@ export class DiscordService {
         logger.info(`Processing category: ${categoryChannel.name} (${categoryId})`);
 
         // Find all text channels in this category
-        const categoryTextChannels = channels.filter(channel => 
+        const categoryTextChannels = channels.filter((channel: any) => 
           channel?.parent?.id === categoryId && 
           channel.isTextBased() &&
           channel.type === 0 // GUILD_TEXT
@@ -171,14 +181,20 @@ export class DiscordService {
 
           logger.info(`📢 Monitoring channel: ${channelName} (${channelId}) in category ${categoryChannel.name} - ${channelConfig.category} - ${channelConfig.tge_phase}`);
 
-          // Join existing threads in this channel
-          await this.joinExistingThreads(channel, channelConfig);
+          // Join existing threads in this channel (with rate limiting)
+          try {
+            await this.joinExistingThreads(channel as TextChannel, channelConfig);
+          } catch (error) {
+            logger.error(`Failed to join threads in ${channelName}:`, error);
+            // Continue processing other channels even if one fails
+          }
         }
       }
 
       logger.info(`✅ Discovered and configured ${this.channelConfigs.size} channels across ${this.categoryConfigs.size} categories`);
     } catch (error) {
       logger.error('Failed to discover and configure channels:', error);
+      throw error;
     }
   }
 
@@ -258,7 +274,10 @@ export class DiscordService {
       if (!parentChannelId || !parentChannelName) {
         try {
           logger.debug(`🔄 Fetching parent channel info for thread ${threadName}...`);
-          const fullThread = await this.client.channels.fetch(message.channelId);
+          const fullThread = await discordRateLimiter.executeWithRetry(
+            () => this.client.channels.fetch(message.channelId),
+            `fetch thread parent info for ${threadName}`
+          );
           if (fullThread && fullThread.isThread()) {
             const thread = fullThread as any;
             parentChannelId = thread.parentId || thread.parent?.id;
@@ -328,11 +347,20 @@ export class DiscordService {
         await this.updateChannelStats(message, channelConfig, parentChannelId);
         await this.updateUserActivity(message, channelConfig, parentChannelId);
       } else {
-        logger.error(`❌ Failed to save message: ${result.error}`);
-        if (isThread) {
-          logger.error(`   🧵 Failed thread: "${threadName}" in parent "${channelConfig.name}"`);
-          logger.error(`   📝 Message from: ${message.author.username}`);
-          logger.error(`   💬 Content: "${message.content?.substring(0, 50)}..."`);
+        // Check if this is a duplicate message error (which is now handled gracefully)
+        if (result.code === '23505') {
+          logger.debug(`📝 Message ${message.id} was processed successfully (duplicate handled)`);
+          // Still update stats even if message was a duplicate
+          await this.updateChannelStats(message, channelConfig, parentChannelId);
+          await this.updateUserActivity(message, channelConfig, parentChannelId);
+        } else {
+          // This is a real error
+          logger.error(`❌ Failed to save message: ${result.error}`);
+          if (isThread) {
+            logger.error(`   🧵 Failed thread: "${threadName}" in parent "${channelConfig.name}"`);
+            logger.error(`   📝 Message from: ${message.author.username}`);
+            logger.error(`   💬 Content: "${message.content?.substring(0, 50)}..."`);
+          }
         }
       }
     } catch (error) {
@@ -565,9 +593,15 @@ export class DiscordService {
 
   async sendMessage(channelId: string, content: string): Promise<void> {
     try {
-      const channel = await this.client.channels.fetch(channelId) as TextChannel;
+      const channel = await discordRateLimiter.executeWithRetry(
+        () => this.client.channels.fetch(channelId),
+        `fetch channel ${channelId} for message`
+      ) as TextChannel;
       if (channel?.isTextBased()) {
-        await channel.send(content);
+        await discordRateLimiter.executeWithRetry(
+          () => channel.send(content),
+          `send message to channel ${channelId}`
+        );
         logger.debug(`Sent message to channel ${channelId}`);
       }
     } catch (error) {
@@ -577,9 +611,15 @@ export class DiscordService {
 
   async sendEmbed(channelId: string, embed: EmbedBuilder): Promise<void> {
     try {
-      const channel = await this.client.channels.fetch(channelId) as TextChannel;
+      const channel = await discordRateLimiter.executeWithRetry(
+        () => this.client.channels.fetch(channelId),
+        `fetch channel ${channelId} for embed`
+      ) as TextChannel;
       if (channel?.isTextBased()) {
-        await channel.send({ embeds: [embed] });
+        await discordRateLimiter.executeWithRetry(
+          () => channel.send({ embeds: [embed] }),
+          `send embed to channel ${channelId}`
+        );
         logger.debug(`Sent embed to channel ${channelId}`);
       }
     } catch (error) {
@@ -652,8 +692,14 @@ export class DiscordService {
     try {
       logger.info('🧵 Verifying thread joining status...');
       
-      const guild = await this.client.guilds.fetch(botConfig.discord.guildId);
-      const channels = await guild.channels.fetch();
+      const guild = await discordRateLimiter.executeWithRetry(
+        () => this.client.guilds.fetch(botConfig.discord.guildId),
+        'fetch guild for thread verification'
+      ) as any;
+      const channels = await discordRateLimiter.executeWithRetry(
+        () => guild.channels.fetch(),
+        'fetch channels for thread verification'
+      ) as any;
       
       let totalThreads = 0;
       let joinedThreads = 0;
@@ -665,7 +711,10 @@ export class DiscordService {
         
         try {
           const textChannel = channel as TextChannel;
-          const activeThreads = await textChannel.threads.fetchActive();
+          const activeThreads = await discordRateLimiter.executeWithRetry(
+            () => textChannel.threads.fetchActive(),
+            `fetch active threads from ${channelConfig.name} for verification`
+          ) as any;
           const threads = activeThreads.threads;
           
           if (threads.size > 0) {
@@ -709,8 +758,14 @@ export class DiscordService {
     try {
       logger.info('🧪 Testing thread message processing...');
       
-      const guild = await this.client.guilds.fetch(botConfig.discord.guildId);
-      const channels = await guild.channels.fetch();
+      const guild = await discordRateLimiter.executeWithRetry(
+        () => this.client.guilds.fetch(botConfig.discord.guildId),
+        'fetch guild for testing'
+      ) as any;
+      const channels = await discordRateLimiter.executeWithRetry(
+        () => guild.channels.fetch(),
+        'fetch channels for testing'
+      ) as any;
       
       for (const [_channelId, channelConfig] of this.channelConfigs) {
         const channel = channels.get(channelConfig.id);
@@ -718,7 +773,10 @@ export class DiscordService {
         
         try {
           const textChannel = channel as TextChannel;
-          const activeThreads = await textChannel.threads.fetchActive();
+          const activeThreads = await discordRateLimiter.executeWithRetry(
+            () => textChannel.threads.fetchActive(),
+            `fetch active threads from ${channelConfig.name} for testing`
+          ) as any;
           const threads = activeThreads.threads;
           
           if (threads.size > 0) {
@@ -744,10 +802,13 @@ export class DiscordService {
               
               // Try to fetch recent messages from this thread
               try {
-                const messages = await thread.messages.fetch({ limit: 5 });
+                const messages = await discordRateLimiter.executeWithRetry(
+                  () => thread.messages.fetch({ limit: 5 }),
+                  `fetch messages from thread ${thread.name}`
+                ) as any;
                 logger.info(`    - Recent messages: ${messages.size}`);
                 
-                messages.forEach(msg => {
+                messages.forEach((msg: any) => {
                   if (!msg.author.bot) {
                     logger.info(`      📝 Message from ${msg.author.username}: "${msg.content?.substring(0, 50)}..."`);
                   }
@@ -804,15 +865,25 @@ export class DiscordService {
 
   async forceJoinAllThreads(): Promise<void> {
     try {
-      logger.info('🔧 Force joining ALL threads in monitored channels...');
+      logger.info('🔧 Force joining ALL threads in monitored channels with rate limiting...');
       
-      const guild = await this.client.guilds.fetch(botConfig.discord.guildId);
-      const channels = await guild.channels.fetch();
+      const guild = await discordRateLimiter.executeWithRetry(
+        () => this.client.guilds.fetch(botConfig.discord.guildId),
+        'fetch guild'
+      );
+      
+      const channels = await discordRateLimiter.executeWithRetry(
+        () => guild.channels.fetch(),
+        'fetch channels'
+      );
       
       let totalProcessed = 0;
       let totalJoined = 0;
       let totalSkipped = 0;
       let totalErrors = 0;
+      
+      // Collect all threads from all channels first
+      const allThreadsToProcess: Array<{ thread: any; channelName: string }> = [];
       
       for (const [_channelId, channelConfig] of this.channelConfigs) {
         const channel = channels.get(channelConfig.id);
@@ -820,41 +891,65 @@ export class DiscordService {
         
         try {
           const textChannel = channel as TextChannel;
-          const activeThreads = await textChannel.threads.fetchActive();
-          const archivedThreads = await textChannel.threads.fetchArchived({ fetchAll: false, limit: 50 });
           
-          const allThreads = [...activeThreads.threads.values(), ...archivedThreads.threads.values()];
+          const [activeThreads, archivedThreads] = await Promise.all([
+            discordRateLimiter.executeWithRetry(
+              () => textChannel.threads.fetchActive(),
+              `fetch active threads from ${channelConfig.name}`
+            ),
+            discordRateLimiter.executeWithRetry(
+              () => textChannel.threads.fetchArchived({ fetchAll: false, limit: 50 }),
+              `fetch archived threads from ${channelConfig.name}`
+            )
+          ]);
           
-          if (allThreads.length > 0) {
-            logger.info(`🧵 Force processing ${allThreads.length} threads in "${channelConfig.name}"`);
-            
-            for (const thread of allThreads) {
-              totalProcessed++;
-              
-              try {
-                if (!thread.joined && !thread.archived) {
-                  await thread.join();
-                  totalJoined++;
-                  logger.info(`   ✅ JOINED: ${thread.name}`);
-                } else if (thread.joined) {
-                  logger.info(`   ✅ Already joined: ${thread.name}`);
-                  totalJoined++;
-                } else if (thread.archived) {
-                  logger.info(`   ⏭️ Skipped archived: ${thread.name}`);
-                  totalSkipped++;
-                }
-              } catch (error) {
-                totalErrors++;
-                logger.error(`   ❌ Failed to join ${thread.name}:`, error);
-              }
-            }
-          } else {
-            logger.info(`📝 No threads found in "${channelConfig.name}"`);
+          const channelThreads = [...activeThreads.threads.values(), ...archivedThreads.threads.values()];
+          
+          if (channelThreads.length > 0) {
+            logger.info(`🧵 Found ${channelThreads.length} threads in "${channelConfig.name}"`);
+            channelThreads.forEach(thread => {
+              allThreadsToProcess.push({ thread, channelName: channelConfig.name });
+            });
           }
         } catch (error) {
-          logger.error(`Error processing threads in ${channelConfig.name}:`, error);
+          logger.error(`Error fetching threads from ${channelConfig.name}:`, error);
+          totalErrors++;
         }
       }
+      
+      if (allThreadsToProcess.length === 0) {
+        logger.info('📝 No threads found to process');
+        return;
+      }
+      
+      logger.info(`🧵 Processing ${allThreadsToProcess.length} threads with rate limiting...`);
+      
+      // Process threads in batches with rate limiting
+      await discordRateLimiter.processBatch(
+        allThreadsToProcess,
+        async ({ thread, channelName }) => {
+          totalProcessed++;
+          
+          if (!thread.joined && !thread.archived) {
+            await thread.join();
+            totalJoined++;
+            logger.info(`   ✅ JOINED: ${thread.name} in ${channelName}`);
+            return 'joined';
+          } else if (thread.joined) {
+            logger.debug(`   ✅ Already joined: ${thread.name} in ${channelName}`);
+            totalJoined++;
+            return 'already_joined';
+          } else if (thread.archived) {
+            logger.debug(`   ⏭️ Skipped archived: ${thread.name} in ${channelName}`);
+            totalSkipped++;
+            return 'skipped_archived';
+          }
+          
+          return 'unknown';
+        },
+        3, // Smaller batch size for thread joins
+        'thread join'
+      );
       
       logger.info('🧵 Force Join Summary:');
       logger.info(`   Total threads processed: ${totalProcessed}`);
@@ -868,6 +963,7 @@ export class DiscordService {
       
     } catch (error) {
       logger.error('Error force joining threads:', error);
+      throw error;
     }
   }
 
@@ -889,11 +985,19 @@ export class DiscordService {
     logger.info('while maintaining the parent channel context for reporting and analytics.');
   }
 
-  private async joinExistingThreads(channel: any, _channelConfig: ChannelConfig): Promise<void> {
+  private async joinExistingThreads(channel: TextChannel, _channelConfig: ChannelConfig): Promise<void> {
     try {
-      // Fetch existing threads in this channel
-      const activeThreads = await channel.threads.fetchActive();
-      const archivedThreads = await channel.threads.fetchArchived({ fetchAll: false, limit: 50 });
+      // Fetch existing threads in this channel with rate limiting
+      const [activeThreads, archivedThreads] = await Promise.all([
+        discordRateLimiter.executeWithRetry(
+          () => channel.threads.fetchActive(),
+          `fetch active threads from ${channel.name}`
+        ) as Promise<any>,
+        discordRateLimiter.executeWithRetry(
+          () => channel.threads.fetchArchived({ fetchAll: false, limit: 50 }),
+          `fetch archived threads from ${channel.name}`
+        ) as Promise<any>
+      ]);
       
       const allThreads = [...activeThreads.threads.values(), ...archivedThreads.threads.values()];
       
@@ -902,41 +1006,50 @@ export class DiscordService {
         return;
       }
 
+      logger.info(`🧵 Processing ${allThreads.length} existing threads in ${channel.name} with rate limiting`);
+
       let joinedCount = 0;
       let skippedCount = 0;
 
-      for (const thread of allThreads) {
-        try {
-          logger.info(`🧵 Processing thread: "${thread.name}" in ${channel.name}`);
-          logger.info(`   - Archived: ${thread.archived}`);
-          logger.info(`   - Already joined: ${thread.joined}`);
+      // Process threads with rate limiting and error handling
+      await discordRateLimiter.processBatch(
+        allThreads,
+        async (thread) => {
+          logger.debug(`🧵 Processing thread: "${thread.name}" in ${channel.name}`);
+          logger.debug(`   - Archived: ${thread.archived}`);
+          logger.debug(`   - Already joined: ${thread.joined}`);
           
           // ✅ THREADS ARE NOT FILTERED BY PATTERNS - All threads in monitored channels are processed
-          logger.info(`   - Pattern filtering: DISABLED for threads (all threads processed)`);
+          logger.debug(`   - Pattern filtering: DISABLED for threads (all threads processed)`);
 
           // Only join if not already joined and not archived
           if (!thread.joined && !thread.archived) {
             await thread.join();
             joinedCount++;
             logger.info(`🧵 ✅ JOINED existing thread: ${thread.name} in ${channel.name}`);
+            return 'joined';
           } else if (thread.joined) {
-            logger.info(`🧵 Already in thread: ${thread.name} in ${channel.name}`);
+            logger.debug(`🧵 Already in thread: ${thread.name} in ${channel.name}`);
             joinedCount++; // Count as joined since we're already in it
+            return 'already_joined';
           } else if (thread.archived) {
-            logger.info(`🧵 SKIPPED archived thread: ${thread.name} in ${channel.name}`);
+            logger.debug(`🧵 SKIPPED archived thread: ${thread.name} in ${channel.name}`);
             skippedCount++;
+            return 'skipped_archived';
           }
-        } catch (threadError) {
-          logger.error(`❌ FAILED to join existing thread ${thread.name}:`, threadError);
-          skippedCount++;
-        }
-      }
+          
+          return 'unknown';
+        },
+        3, // Small batch size for thread joins
+        `join threads in ${channel.name}`
+      );
 
       if (joinedCount > 0 || allThreads.length > 0) {
         logger.info(`🧵 Thread summary for ${channel.name}: ${joinedCount} joined, ${skippedCount} skipped, ${allThreads.length} total`);
       }
     } catch (error) {
       logger.error(`Error fetching/joining existing threads in ${channel.name}:`, error);
+      throw error;
     }
   }
 
@@ -954,7 +1067,10 @@ export class DiscordService {
       // CRITICAL: Bot must join threads to receive messages from them
       if (!thread.joined) {
         try {
-          await thread.join();
+          await discordRateLimiter.executeWithRetry(
+            () => thread.join(),
+            `join new thread ${thread.name}`
+          );
           logger.info(`🧵 ✅ JOINED new thread: ${thread.name} (${thread.id}) in ${parentChannel.name}`);
         } catch (joinError) {
           logger.error(`❌ Failed to join new thread ${thread.name}:`, joinError);
