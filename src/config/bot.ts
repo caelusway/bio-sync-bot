@@ -17,6 +17,14 @@ if (missingVars.length > 0) {
   throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
 }
 
+// Check if Telegram is enabled
+const telegramEnabled = !!process.env['TELEGRAM_BOT_TOKEN'];
+if (telegramEnabled) {
+  console.log('Telegram bot is enabled');
+} else {
+  console.log('Telegram bot is disabled (TELEGRAM_BOT_TOKEN not provided)');
+}
+
 // Parse category configurations from environment variables
 function parseCategoryConfigs(): CategoryConfig[] {
   const configs: CategoryConfig[] = [];
@@ -170,12 +178,18 @@ export const botConfig: BotConfig = {
     clientId: process.env['DISCORD_CLIENT_ID']!,
     guildId: process.env['DISCORD_GUILD_ID']!
   },
+  telegram: {
+    token: process.env['TELEGRAM_BOT_TOKEN'] || '',
+    ...(process.env['TELEGRAM_WEBHOOK_URL'] && { webhook_url: process.env['TELEGRAM_WEBHOOK_URL'] }),
+    polling: process.env['TELEGRAM_POLLING'] !== 'false' // Default to true
+  },
   supabase: {
     url: process.env['SUPABASE_URL']!,
     anonKey: process.env['SUPABASE_ANON_KEY']!
   },
   categories: parseCategoryConfigs(),
   channels: [], // Will be populated dynamically based on categories
+  telegramChats: [], // Will be populated dynamically based on joined groups
   rateLimiting: {
     windowMs: parseInt(process.env['RATE_LIMIT_WINDOW_MS'] || '60000'),
     maxRequests: parseInt(process.env['RATE_LIMIT_MAX_REQUESTS'] || '100')

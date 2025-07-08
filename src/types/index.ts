@@ -24,6 +24,33 @@ export interface DiscordMessage {
   updated_at: string;
 }
 
+export interface TelegramMessage {
+  id: string;
+  chat_id: string;
+  chat_title: string;
+  chat_type: string;
+  user_id: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  content?: string;
+  attachments: TelegramAttachment[];
+  timestamp: string;
+  edited_timestamp?: string;
+  message_type: string;
+  category: TelegramMessageCategory;
+  metadata: Record<string, any>;
+  // Reply support
+  reply_to_message_id?: string;
+  reply_to_user_id?: string;
+  // Forward support
+  forward_from_chat_id?: string;
+  forward_from_message_id?: string;
+  forward_date?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface MessageAttachment {
   id: string;
   filename: string;
@@ -32,6 +59,25 @@ export interface MessageAttachment {
   content_type: string | undefined;
   width: number | undefined;
   height: number | undefined;
+}
+
+export interface TelegramAttachment {
+  type: 'photo' | 'video' | 'audio' | 'voice' | 'document' | 'sticker' | 'animation' | 'video_note';
+  file_id: string;
+  file_unique_id: string;
+  file_size?: number;
+  file_name?: string;
+  mime_type?: string;
+  width?: number;
+  height?: number;
+  duration?: number;
+  thumb?: {
+    file_id: string;
+    file_unique_id: string;
+    width: number;
+    height: number;
+    file_size?: number;
+  };
 }
 
 export interface MessageEmbed {
@@ -75,6 +121,12 @@ export enum MessageCategory {
   OTHER = 'other'
 }
 
+export enum TelegramMessageCategory {
+  GROUP = 'group',
+  CHANNEL = 'channel',
+  PRIVATE = 'private'
+}
+
 export enum TGEPhase {
   PRE_TGE = 'pre-tge',
   POST_TGE = 'post-tge'
@@ -102,6 +154,15 @@ export interface ChannelConfig {
   filters: MessageFilter[];
 }
 
+export interface TelegramChatConfig {
+  id: string;
+  title: string;
+  type: string;
+  category: TelegramMessageCategory;
+  monitoring_enabled: boolean;
+  filters: MessageFilter[];
+}
+
 export interface MessageFilter {
   type: 'content' | 'author' | 'attachment' | 'embed';
   condition: 'contains' | 'equals' | 'regex' | 'exists';
@@ -115,12 +176,18 @@ export interface BotConfig {
     clientId: string;
     guildId: string;
   };
+  telegram: {
+    token: string;
+    webhook_url?: string;
+    polling: boolean;
+  };
   supabase: {
     url: string;
     anonKey: string;
   };
   categories: CategoryConfig[];
   channels: ChannelConfig[]; // This will be populated dynamically
+  telegramChats: TelegramChatConfig[]; // This will be populated dynamically
   rateLimiting: {
     windowMs: number;
     maxRequests: number;
@@ -156,6 +223,19 @@ export interface ChannelStats {
   updated_at: string;
 }
 
+export interface TelegramChatStats {
+  chat_id: string;
+  chat_title: string;
+  chat_type: string;
+  category: TelegramMessageCategory;
+  total_messages: number;
+  messages_today: number;
+  messages_this_week: number;
+  last_message_at?: string;
+  active_users_count: number;
+  updated_at: string;
+}
+
 export interface UserActivity {
   user_id: string;
   username: string;
@@ -164,6 +244,20 @@ export interface UserActivity {
   channel_name: string;
   category: MessageCategory;
   discord_tge_phase: TGEPhase;
+  message_count: number;
+  last_message_at: string;
+  first_message_at: string;
+  updated_at: string;
+}
+
+export interface TelegramUserActivity {
+  user_id: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  chat_id: string;
+  chat_title: string;
+  category: TelegramMessageCategory;
   message_count: number;
   last_message_at: string;
   first_message_at: string;

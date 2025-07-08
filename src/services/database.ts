@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { DiscordMessage, ChannelStats, UserActivity, ServiceResponse } from '@/types';
+import { DiscordMessage, ChannelStats, UserActivity, ServiceResponse, TelegramMessage, TelegramChatStats, TelegramUserActivity } from '@/types';
 import { botConfig } from '@/config/bot';
 import { logger } from '@/utils/logger';
 
@@ -355,6 +355,273 @@ export class DatabaseService {
       return { success: true, data: data || [] };
     } catch (error) {
       logger.error('Unexpected error getting messages by parent channel:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  // Telegram methods
+  async saveTelegramMessage(message: Omit<TelegramMessage, 'created_at' | 'updated_at'>): Promise<ServiceResponse<TelegramMessage>> {
+    try {
+      // First, try to check if the message already exists
+      const { data: existingMessage } = await this.supabase
+        .from('telegram_messages')
+        .select('id, created_at')
+        .eq('id', message.id)
+        .single();
+
+      const now = new Date().toISOString();
+      
+      if (existingMessage) {
+        // Message exists, update it while preserving created_at
+        const { data, error } = await this.supabase
+          .from('telegram_messages')
+          .update({
+            ...message,
+            created_at: existingMessage.created_at, // Preserve original created_at
+            updated_at: now
+          })
+          .eq('id', message.id)
+          .select()
+          .single();
+
+        if (error) {
+          logger.error('Failed to update existing Telegram message:', error);
+          return { success: false, error: error.message, code: error.code };
+        }
+
+        logger.debug(`Telegram message updated successfully: ${data.id}`);
+        return { success: true, data };
+      } else {
+        // Message doesn't exist, insert it
+        const { data, error } = await this.supabase
+          .from('telegram_messages')
+          .insert([{
+            ...message,
+            created_at: now,
+            updated_at: now
+          }])
+          .select()
+          .single();
+
+        if (error) {
+          // Handle race condition where message might have been inserted between our check and insert
+          if (error.code === '23505') { // Unique constraint violation
+            logger.warn(`Telegram message ${message.id} was inserted by another process, attempting update...`);
+            
+            // Try to update instead
+            const { data: updateData, error: updateError } = await this.supabase
+              .from('telegram_messages')
+              .update({
+                ...message,
+                updated_at: now
+              })
+              .eq('id', message.id)
+              .select()
+              .single();
+
+            if (updateError) {
+              logger.error('Failed to update Telegram message after race condition:', updateError);
+              return { success: false, error: updateError.message, code: updateError.code };
+            }
+
+            logger.debug(`Telegram message updated after race condition: ${updateData.id}`);
+            return { success: true, data: updateData };
+          }
+          
+          logger.error('Failed to insert new Telegram message:', error);
+          return { success: false, error: error.message, code: error.code };
+        }
+
+        logger.debug(`Telegram message inserted successfully: ${data.id}`);
+        return { success: true, data };
+      }
+    } catch (error) {
+      logger.error('Unexpected error saving Telegram message:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  async updateTelegramMessage(messageId: string, updates: Partial<TelegramMessage>): Promise<ServiceResponse<TelegramMessage>> {
+    try {
+      const { data, error } = await this.supabase
+        .from('telegram_messages')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', messageId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Failed to update Telegram message:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      logger.debug(`Telegram message updated successfully: ${messageId}`);
+      return { success: true, data };
+    } catch (error) {
+      logger.error('Unexpected error updating Telegram message:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  async deleteTelegramMessage(messageId: string): Promise<ServiceResponse<void>> {
+    try {
+      const { error } = await this.supabase
+        .from('telegram_messages')
+        .delete()
+        .eq('id', messageId);
+
+      if (error) {
+        logger.error('Failed to delete Telegram message:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      logger.debug(`Telegram message deleted successfully: ${messageId}`);
+      return { success: true };
+    } catch (error) {
+      logger.error('Unexpected error deleting Telegram message:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  async getTelegramChatStats(chatId: string): Promise<ServiceResponse<TelegramChatStats>> {
+    try {
+      const { data, error } = await this.supabase
+        .from('telegram_chat_stats')
+        .select('*')
+        .eq('chat_id', chatId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
+        logger.error('Failed to get Telegram chat stats:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      return { success: true, data: data || null };
+    } catch (error) {
+      logger.error('Unexpected error getting Telegram chat stats:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  async updateTelegramChatStats(stats: Omit<TelegramChatStats, 'updated_at'>): Promise<ServiceResponse<TelegramChatStats>> {
+    try {
+      const { data, error } = await this.supabase
+        .from('telegram_chat_stats')
+        .upsert({
+          ...stats,
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Failed to update Telegram chat stats:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      logger.error('Unexpected error updating Telegram chat stats:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  async updateTelegramUserActivity(activity: Omit<TelegramUserActivity, 'updated_at'>): Promise<ServiceResponse<TelegramUserActivity>> {
+    try {
+      const { data, error } = await this.supabase
+        .rpc('upsert_telegram_user_activity', {
+          p_user_id: activity.user_id,
+          p_username: activity.username,
+          p_first_name: activity.first_name,
+          p_last_name: activity.last_name,
+          p_chat_id: activity.chat_id,
+          p_chat_title: activity.chat_title,
+          p_category: activity.category,
+          p_message_timestamp: activity.last_message_at
+        }) as { data: TelegramUserActivity | null, error: any };
+
+      if (error) {
+        logger.error('Failed to update Telegram user activity:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      if (!data) {
+        logger.error('No data returned from Telegram user activity upsert');
+        return { success: false, error: 'No data returned from upsert operation' };
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      logger.error('Unexpected error updating Telegram user activity:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  async getTelegramMessagesByChat(chatId: string, limit = 100, offset = 0): Promise<ServiceResponse<TelegramMessage[]>> {
+    try {
+      const { data, error } = await this.supabase
+        .from('telegram_messages')
+        .select('*')
+        .eq('chat_id', chatId)
+        .order('timestamp', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) {
+        logger.error('Failed to get Telegram messages by chat:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      return { success: true, data: data || [] };
+    } catch (error) {
+      logger.error('Unexpected error getting Telegram messages by chat:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  async getTelegramMessagesByCategory(category: string, limit = 100, offset = 0): Promise<ServiceResponse<TelegramMessage[]>> {
+    try {
+      const { data, error } = await this.supabase
+        .from('telegram_messages')
+        .select('*')
+        .eq('category', category)
+        .order('timestamp', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) {
+        logger.error('Failed to get Telegram messages by category:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      return { success: true, data: data || [] };
+    } catch (error) {
+      logger.error('Unexpected error getting Telegram messages by category:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  async cleanupOldTelegramMessages(): Promise<ServiceResponse<{ deleted_count: number }>> {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - botConfig.database.maxMessageAgeDays);
+
+      const { data, error } = await this.supabase
+        .from('telegram_messages')
+        .delete()
+        .lt('created_at', cutoffDate.toISOString());
+
+      if (error) {
+        logger.error('Failed to cleanup old Telegram messages:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      const deletedCount = Array.isArray(data) ? (data as any[]).length : (data ? 1 : 0);
+      logger.info(`Cleaned up ${deletedCount} old Telegram messages`);
+      return { success: true, data: { deleted_count: deletedCount } };
+    } catch (error) {
+      logger.error('Unexpected error cleaning up old Telegram messages:', error);
       return { success: false, error: 'Unexpected error occurred' };
     }
   }

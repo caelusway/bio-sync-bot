@@ -24,12 +24,14 @@
   "license": "MIT",
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
+    "@types/node-telegram-bot-api": "^0.64.9",
     "cors": "^2.8.5",
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "helmet": "^7.1.0",
     "node-cron": "^3.0.3",
+    "node-telegram-bot-api": "^0.66.0",
     "rate-limiter-flexible": "^5.0.5",
     "tsconfig-paths": "^4.2.0",
     "winston": "^3.11.0"
