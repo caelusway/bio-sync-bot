@@ -33,21 +33,49 @@ A production-ready Discord bot built with TypeScript that monitors Discord chann
 - PRE-TGE INTERNAL
 - POST-TGE INTERNAL
 
-## Category-Based Monitoring
+## Monitoring Modes
 
-Instead of configuring individual channel IDs, this bot monitors **entire Discord categories**. This approach offers several advantages:
+This bot supports two monitoring modes:
+
+### 1. Category-Based Monitoring (Primary)
+
+Monitor **entire Discord categories** automatically:
 
 - ✅ **Automatic Detection**: New channels added to monitored categories are automatically tracked
 - ✅ **Scalable**: No need to update configuration when channels are added/removed
 - ✅ **Organized**: Follows Discord's natural channel organization
 - ✅ **Flexible**: Supports include/exclude patterns for fine-grained control
 
-### How It Works
+#### How It Works
 
 1. **Configure Categories**: Specify Discord category IDs instead of individual channel IDs
 2. **Auto-Discovery**: Bot scans categories and finds all text channels
 3. **Pattern Matching**: Optional include/exclude patterns for channel names
 4. **Real-Time Updates**: Automatically handles new/deleted channels
+
+### 2. Individual Channel Monitoring
+
+Monitor **specific channels** by ID:
+
+- ✅ **Precise Control**: Monitor exactly the channels you want
+- ✅ **Cross-Category**: Monitor channels from different categories
+- ✅ **Priority**: Individual channels take priority over category-based discovery
+- ✅ **Thread Support**: Full thread monitoring support
+- ✅ **Forum Support**: Forum channels supported (forum posts treated as threads)
+
+#### How It Works
+
+1. **Configure Channels**: Specify individual Discord channel IDs in JSON format
+2. **Auto-Discovery**: Bot fetches channel details from Discord
+3. **Categorization**: Automatically categorizes channels based on names
+4. **Thread Support**: Automatically joins and monitors threads
+
+### Hybrid Approach
+
+You can use both modes together:
+- Individual channels take priority (if a channel is configured both ways, individual config wins)
+- Category-based discovery fills in the rest
+- No conflicts or duplicate monitoring
 
 ## Quick Start
 
@@ -123,13 +151,104 @@ PRE_TGE_CATEGORIES=category_id_1,category_id_2
 POST_TGE_CATEGORIES=category_id_3,category_id_4
 MONITORED_CATEGORIES=category_id_5,category_id_6
 
+# Individual Channel Configuration (JSON format)
+INDIVIDUAL_CHANNELS={"channel_id_1":{"name":"channel_name","message_category":"marketing","tge_phase":"pre-tge"},"channel_id_2":{"name":"channel_name_2","message_category":"dao-program","tge_phase":"pre-tge"}}
+
 # Advanced Category Configuration (Optional JSON)
 CATEGORY_CONFIGS={"category_id_1":{"message_category":"core-general","include_patterns":["important"],"exclude_patterns":["test"]}}
+
+# Telegram Configuration (Optional)
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_WEBHOOK_URL=your_webhook_url
+TELEGRAM_POLLING=true
+
+# Historical Message Backfill (Optional)
+BACKFILL_HISTORICAL_MESSAGES=true
+BACKFILL_MESSAGE_LIMIT=100
+BACKFILL_DAYS_LIMIT=30
 
 # Optional Configuration
 NODE_ENV=development
 PORT=3000
 LOG_LEVEL=info
+```
+
+## Individual Channel Configuration
+
+For monitoring specific channels, use the `INDIVIDUAL_CHANNELS` environment variable with JSON configuration:
+
+```json
+{
+  "1199662748225777665": {
+    "name": "marketing_general",
+    "message_category": "marketing",
+    "tge_phase": "pre-tge"
+  },
+  "1390367512016851036": {
+    "name": "marketing_topics",
+    "message_category": "marketing",
+    "tge_phase": "pre-tge"
+  },
+  "1314862563426697299": {
+    "name": "dao-program_general",
+    "message_category": "dao-program",
+    "tge_phase": "pre-tge"
+  }
+}
+```
+
+### Individual Channel Options
+
+- **name**: Channel name (will be auto-updated from Discord)
+- **message_category**: One of: `core-general`, `product`, `tech`, `ai-agents`, `ai`, `design`, `marketing`, `tokenomics`, `dao-program`, `events`, `other`
+- **tge_phase**: Either `pre-tge` or `post-tge`
+- **monitoring_enabled**: `true` or `false` (default: `true`)
+- **filters**: Array of message filters (optional)
+
+### Supported Channel Types
+
+- **Text Channels** (Type 0): Regular Discord text channels with thread support
+- **Forum Channels** (Type 15): Discord forum channels where posts are treated as threads
+
+## Historical Message Backfill
+
+The bot supports backfilling historical messages from tracked channels on startup or on-demand. This ensures you capture existing conversations when first deploying the bot.
+
+### Environment Variables
+
+```env
+# Enable backfill on bot startup
+BACKFILL_HISTORICAL_MESSAGES=true
+
+# Maximum messages to fetch per channel (default: 100)
+BACKFILL_MESSAGE_LIMIT=500
+
+# Only backfill messages from the last X days (default: 30)
+BACKFILL_DAYS_LIMIT=7
+```
+
+### Features
+
+- ✅ **Automatic Startup**: Backfill runs automatically when `BACKFILL_HISTORICAL_MESSAGES=true`
+- ✅ **Manual Trigger**: Use API endpoint `POST /api/backfill/historical-messages`
+- ✅ **Smart Deduplication**: Skips messages that already exist in the database
+- ✅ **Thread Support**: Backfills messages from threads and forum posts
+- ✅ **Rate Limited**: Respects Discord's rate limits during backfill
+- ✅ **Configurable Limits**: Control how many messages and how far back to fetch
+- ✅ **Progress Logging**: Detailed logging of backfill progress
+
+### Usage
+
+1. **First Time Setup**: Set `BACKFILL_HISTORICAL_MESSAGES=true` in your `.env` file
+2. **Start the Bot**: Historical messages will be backfilled automatically on startup
+3. **Manual Backfill**: Use the API endpoint for on-demand backfilling
+4. **Monitor Progress**: Check logs for detailed backfill statistics
+
+### API Endpoint
+
+```bash
+# Trigger manual backfill
+curl -X POST http://localhost:3000/api/backfill/historical-messages
 ```
 
 ## Advanced Category Configuration

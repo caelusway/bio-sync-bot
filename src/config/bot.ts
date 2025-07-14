@@ -1,4 +1,4 @@
-import { BotConfig, CategoryConfig, MessageCategory, TGEPhase } from '@/types';
+import { BotConfig, CategoryConfig, ChannelConfig, MessageCategory, TGEPhase } from '@/types';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -101,6 +101,38 @@ function parseCategoryConfigs(): CategoryConfig[] {
   return configs;
 }
 
+// Parse individual channel configurations from environment variables
+function parseIndividualChannelConfigs(): ChannelConfig[] {
+  const configs: ChannelConfig[] = [];
+  
+  // Parse individual channels from environment variable
+  const individualChannelsString = process.env['INDIVIDUAL_CHANNELS'];
+  if (individualChannelsString) {
+    try {
+      const individualChannels = JSON.parse(individualChannelsString);
+      Object.entries(individualChannels).forEach(([channelId, config]: [string, any]) => {
+        const channelName = config.name || `channel-${channelId}`;
+        const messageCategory = config.message_category || getCategoryFromChannelName(channelName);
+        
+        configs.push({
+          id: channelId,
+          name: channelName,
+          category_id: config.category_id || 'individual',
+          category_name: config.category_name || 'Individual Channel',
+          category: messageCategory,
+          tge_phase: config.tge_phase || TGEPhase.PRE_TGE,
+          monitoring_enabled: config.monitoring_enabled !== false,
+          filters: config.filters || []
+        });
+      });
+    } catch (error) {
+      console.warn('Failed to parse INDIVIDUAL_CHANNELS:', error);
+    }
+  }
+
+  return configs;
+}
+
 // Determine category based on Discord category name
 function getCategoryFromCategoryName(categoryName: string): MessageCategory {
   const name = categoryName.toLowerCase();
@@ -188,7 +220,7 @@ export const botConfig: BotConfig = {
     anonKey: process.env['SUPABASE_ANON_KEY']!
   },
   categories: parseCategoryConfigs(),
-  channels: [], // Will be populated dynamically based on categories
+  channels: parseIndividualChannelConfigs(), // Pre-populate with individual channel configs
   telegramChats: [], // Will be populated dynamically based on joined groups
   rateLimiting: {
     windowMs: parseInt(process.env['RATE_LIMIT_WINDOW_MS'] || '60000'),

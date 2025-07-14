@@ -309,6 +309,25 @@ export class Server {
       }
     });
 
+    this.app.get('/api/debug/channels', async (_req, res) => {
+      try {
+        logger.info('All channels debug requested via API');
+        await discordService.debugAllChannels();
+        
+        res.json({ 
+          success: true, 
+          message: 'All channels debug completed - check logs for detailed channel information',
+          note: 'This endpoint shows all available channels and checks individual channel configurations. Supports both text channels and forum channels.'
+        });
+      } catch (error) {
+        logger.error('Failed to debug all channels:', error);
+        res.status(500).json({ 
+          success: false, 
+          error: 'Failed to debug all channels' 
+        });
+      }
+    });
+
     this.app.post('/api/threads/force-join-all', async (_req, res) => {
       try {
         logger.info('Force join all threads requested via API');
@@ -324,6 +343,25 @@ export class Server {
         res.status(500).json({ 
           success: false, 
           error: 'Failed to force join all threads' 
+        });
+      }
+    });
+
+    this.app.post('/api/backfill/historical-messages', async (_req, res) => {
+      try {
+        logger.info('Historical message backfill requested via API');
+        await discordService.backfillHistoricalMessages();
+        
+        res.json({ 
+          success: true, 
+          message: 'Historical message backfill completed successfully. Check logs for detailed results.',
+          note: 'This process fetches and stores historical messages from all tracked channels and threads/forum posts.'
+        });
+      } catch (error) {
+        logger.error('Failed to backfill historical messages:', error);
+        res.status(500).json({ 
+          success: false, 
+          error: 'Failed to backfill historical messages' 
         });
       }
     });
@@ -351,7 +389,9 @@ export class Server {
           'GET /api/threads/verify-joining',
           'GET /api/threads/test-processing',
           'GET /api/debug/categories',
-          'POST /api/threads/force-join-all'
+          'GET /api/debug/channels',
+          'POST /api/threads/force-join-all',
+          'POST /api/backfill/historical-messages'
         ],
         thread_storage_info: {
           description: 'Thread messages are stored with parent channel names',
