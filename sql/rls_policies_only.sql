@@ -146,13 +146,13 @@ BEGIN
   FOREACH dao_name IN ARRAY dao_names
   LOOP
     -- Insert policy
-    EXECUTE format('CREATE POLICY "Allow service inserts on dao_%s_tweets" ON public.dao_%s_tweets FOR INSERT WITH CHECK (true);', dao_name, dao_name);
+    EXECUTE format('CREATE POLICY "Allow service inserts on account_%s_tweets" ON public.account_%s_tweets FOR INSERT WITH CHECK (true);', dao_name, dao_name);
     
     -- Update policy
-    EXECUTE format('CREATE POLICY "Allow service updates on dao_%s_tweets" ON public.dao_%s_tweets FOR UPDATE USING (true) WITH CHECK (true);', dao_name, dao_name);
+    EXECUTE format('CREATE POLICY "Allow service updates on account_%s_tweets" ON public.account_%s_tweets FOR UPDATE USING (true) WITH CHECK (true);', dao_name, dao_name);
     
     -- Select policy
-    EXECUTE format('CREATE POLICY "Allow public read on dao_%s_tweets" ON public.dao_%s_tweets FOR SELECT USING (true);', dao_name, dao_name);
+    EXECUTE format('CREATE POLICY "Allow public read on account_%s_tweets" ON public.account_%s_tweets FOR SELECT USING (true);', dao_name, dao_name);
   END LOOP;
 END $$;
 

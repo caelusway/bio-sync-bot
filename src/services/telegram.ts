@@ -14,8 +14,9 @@ export class TelegramService {
       throw new Error('TELEGRAM_BOT_TOKEN environment variable is required');
     }
 
+    // Create bot instance WITHOUT polling - we'll start polling in start() method
     this.bot = new TelegramBot(process.env['TELEGRAM_BOT_TOKEN'], {
-      polling: true
+      polling: false
     });
     
     this.chatConfigs = new Map();
@@ -67,6 +68,9 @@ export class TelegramService {
       // Initialize chat configurations
       await this.initializeChatConfigurations();
 
+      // Start polling for updates
+      await this.bot.startPolling();
+      
       this.isStarted = true;
       logger.info('Telegram bot started successfully');
     } catch (error) {
@@ -77,9 +81,11 @@ export class TelegramService {
 
   async stop(): Promise<void> {
     try {
-      await this.bot.stopPolling();
-      this.isStarted = false;
-      logger.info('Telegram bot stopped successfully');
+      if (this.isStarted) {
+        await this.bot.stopPolling();
+        this.isStarted = false;
+        logger.info('Telegram bot stopped successfully');
+      }
     } catch (error) {
       logger.error('Failed to stop Telegram bot:', error);
       throw error;

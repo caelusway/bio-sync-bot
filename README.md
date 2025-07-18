@@ -288,15 +288,93 @@ For fine-grained control, you can use the `CATEGORY_CONFIGS` environment variabl
    - Copy the bot token
 
 2. **Bot Permissions**
-   Required bot permissions:
-   - View Channels
-   - Read Message History
-   - Send Messages
+   
+   **⚠️ Important**: This bot does **NOT** need Administrator permissions or any elevated access.
+   
+   **Option A: Direct Bot Permissions (Current)**
+   **CRITICAL** - Required bot permissions:
+   - **View Channels** (essential - to discover channels in categories)
+   - **Read Message History** (essential - to read messages and backfill historical data)
+   - **Send Messages** (optional, only if using bot's send functionality)
+   
+   **NOT NEEDED** - Remove these permissions:
+   - ❌ **Presence** (bot doesn't track user status)
+   - ❌ **Members** (not needed - author info comes from messages)
+
+   **Option B: Role-Based Permissions (Recommended)**
+   1. Create a "Bio Core" role with these permissions:
+      - **View Channels** (essential)
+      - **Read Message History** (essential)
+      - **Send Messages** (optional)
+   2. Assign this role to the bot
+   3. Configure channel-specific permissions for monitored categories
+   4. **DO NOT** give: Presence, Members, or any admin permissions
 
 3. **Invite Bot to Server**
    ```
+   # Recommended permissions (68608 = View Channels + Read Message History + Send Messages)
    https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=68608&scope=bot
+   
+   # Read-only minimal (67584 = View Channels + Read Message History only)
+   https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=67584&scope=bot
    ```
+
+   **⚠️ IMPORTANT**: Your current bot permissions are missing **View Channels** which is essential for operation!
+
+### Fix Current Permission Issues
+
+If your bot currently has **Read Messages**, **Presence**, and **Members** permissions:
+
+1. **Remove unnecessary permissions**:
+   - ❌ Remove **Presence** (not needed)
+   - ❌ Remove **Members** (not needed)
+
+2. **Add missing essential permission**:
+   - ✅ Add **View Channels** (critical for operation)
+
+3. **Keep essential permissions**:
+   - ✅ Keep **Read Message History** (essential)
+   - ✅ Optionally add **Send Messages** (if needed)
+
+**Result**: Your bot should have only **View Channels** + **Read Message History** + **Send Messages** (optional)
+
+### Transitioning to Bio Core Role-Based Permissions
+
+If you want to use a "Bio Core" role instead of direct bot permissions:
+
+1. **Create the Bio Core Role**:
+   - Server Settings → Roles → Create Role
+   - Name: "Bio Core"
+   - **Server Permissions**: 
+     - ✅ **View Channels** (essential)
+     - ✅ **Read Message History** (essential)
+     - ✅ **Send Messages** (optional)
+   - **DO NOT** give: Administrator, Manage Server, Manage Channels, Presence, Members
+
+2. **Configure Channel Access**:
+   - For each monitored category, ensure Bio Core role has:
+     - ✅ **View Channel** (essential)
+     - ✅ **Read Message History** (essential)
+     - ✅ **Send Messages** (optional, if needed)
+   - **DO NOT** enable: Presence, Members, or management permissions
+
+3. **Assign Role to Bot**:
+   - Server Settings → Members
+   - Find your bot → Edit → Assign "Bio Core" role
+   - Remove any other roles (especially admin roles)
+
+4. **Test the Setup**:
+   - Check that the bot can still see monitored channels
+   - Verify it can read message history for backfill
+   - Confirm monitoring works as expected
+
+### Security Benefits of Role-Based Approach
+
+- ✅ **Easier Management**: Update permissions in one place
+- ✅ **Principle of Least Privilege**: Only necessary permissions
+- ✅ **Auditable**: Clear role-based access control
+- ✅ **Scalable**: Easy to apply to multiple bots/services
+- ✅ **Revocable**: Easy to modify or remove access
 
 ## API Endpoints
 
@@ -447,6 +525,39 @@ If you have an existing channel-based configuration:
    - Check bot permissions
    - Verify Discord token is valid
    - Review health endpoints
+
+4. **Permission-related issues**
+   - **"Missing Access" errors**: Bot lacks View Channels permission
+   - **"Cannot read message history"**: Bot lacks Read Message History permission
+   - **Channel discovery fails**: Verify Bio Core role has access to monitored categories
+   - **Backfill fails**: Ensure Read Message History permission is granted for all monitored channels
+   - **Bot has wrong permissions**: Remove Presence/Members, ensure View Channels is enabled
+
+### Verifying Bot Permissions
+
+To verify your bot has the correct permissions:
+
+1. **Check Role Assignment**:
+   ```bash
+   # Look for "Bio Core" role in server member list
+   # Bot should have ONLY the Bio Core role (no admin roles)
+   ```
+
+2. **Test Channel Access**:
+   - Go to any monitored channel
+   - Check if bot appears in member list
+   - Verify bot can see message history
+
+3. **Monitor Bot Logs**:
+   ```bash
+   # Look for permission errors in logs
+   docker logs biodao-bot | grep -i "permission\|access\|forbidden"
+   ```
+
+4. **Use Discord Developer Tools**:
+   - Enable Developer Mode in Discord
+   - Right-click bot → "Copy ID"
+   - Check bot permissions in Server Settings → Members
 
 ## Contributing
 
