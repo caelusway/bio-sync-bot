@@ -408,7 +408,8 @@ export class Server {
         });
       }
 
-      const authUrl = `https://webflow.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=sites:read forms:read`;
+      const scopes = 'sites:read forms:read';
+      const authUrl = `https://webflow.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=${encodeURIComponent(scopes)}`;
       
       return res.json({
         success: true,
