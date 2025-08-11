@@ -398,7 +398,7 @@ export class Server {
     // ================================
     
     // Start OAuth2 flow - redirect to Webflow authorization
-    this.app.get('/auth/webflow', (_req, res) => {
+    this.app.get('/auth/webflow', (req, res) => {
       const clientId = process.env['WEBFLOW_CLIENT_ID'];
       
       if (!clientId) {
@@ -409,12 +409,28 @@ export class Server {
       }
 
       const scopes = 'sites:read forms:read';
-      const authUrl = `https://webflow.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=${encodeURIComponent(scopes)}`;
+      const encodedScopes = encodeURIComponent(scopes);
+      const redirectUri = `${req.protocol}://${req.get('host')}/auth/webflow/callback`;
+      const authUrl = `https://webflow.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=${encodedScopes}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+      
+      // Debug logging
+      logger.info('Webflow OAuth Debug:');
+      logger.info(`Client ID: ${clientId}`);
+      logger.info(`Scopes: ${scopes}`);
+      logger.info(`Encoded Scopes: ${encodedScopes}`);
+      logger.info(`Redirect URI: ${redirectUri}`);
+      logger.info(`Full Auth URL: ${authUrl}`);
       
       return res.json({
         success: true,
         message: 'Visit the authorization URL to complete OAuth2 flow',
         auth_url: authUrl,
+        debug_info: {
+          client_id: clientId,
+          requested_scopes: scopes,
+          encoded_scopes: encodedScopes,
+          redirect_uri: redirectUri
+        },
         instructions: [
           '1. Visit the auth_url above',
           '2. Authorize the application',
