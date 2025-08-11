@@ -398,7 +398,7 @@ export class Server {
     // ================================
     
     // Start OAuth2 flow - redirect to Webflow authorization
-    this.app.get('/auth/webflow', (req, res) => {
+    this.app.get('/auth/webflow', (_req, res) => {
       const clientId = process.env['WEBFLOW_CLIENT_ID'];
       
       if (!clientId) {
@@ -410,7 +410,8 @@ export class Server {
 
       const scopes = 'sites:read forms:read';
       const encodedScopes = encodeURIComponent(scopes);
-      const redirectUri = `${req.protocol}://${req.get('host')}/auth/webflow/callback`;
+      // Use production Railway URL for redirect URI
+      const redirectUri = 'https://bio-sync-bot-production.up.railway.app/auth/webflow/callback';
       const authUrl = `https://webflow.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=${encodedScopes}&redirect_uri=${encodeURIComponent(redirectUri)}`;
       
       // Debug logging
