@@ -271,4 +271,159 @@ export interface ServiceResponse<T = any> {
   data?: T;
   error?: string;
   code?: string;
+}
+
+// ================================
+// GROWTH TRACKING TYPES
+// 🛡️ PRODUCTION SAFE: Only additive types, no changes to existing functionality
+// ================================
+
+export enum PlatformType {
+  DISCORD = 'discord',
+  TELEGRAM = 'telegram',
+  YOUTUBE = 'youtube',
+  LINKEDIN = 'linkedin',
+  LUMA = 'luma',
+  EMAIL_NEWSLETTER = 'email_newsletter'
+}
+
+export enum MetricType {
+  // Discord metrics
+  DISCORD_MESSAGE_COUNT = 'discord_message_count',
+  DISCORD_MEMBER_COUNT = 'discord_member_count',
+  
+  // Telegram metrics  
+  TELEGRAM_MESSAGE_COUNT = 'telegram_message_count',
+  TELEGRAM_MEMBER_COUNT = 'telegram_member_count',
+  
+  // YouTube metrics
+  YOUTUBE_TOTAL_VIEWS = 'youtube_total_views',
+  YOUTUBE_TOTAL_IMPRESSIONS = 'youtube_total_impressions',
+  YOUTUBE_TOP_VIDEO_VIEWS = 'youtube_top_video_views',
+  YOUTUBE_TOP_VIDEO_IMPRESSIONS = 'youtube_top_video_impressions',
+  
+  // LinkedIn metrics
+  LINKEDIN_FOLLOWER_COUNT = 'linkedin_follower_count',
+  
+  // Luma metrics
+  LUMA_PAGE_VIEWS = 'luma_page_views',
+  LUMA_SUBSCRIBER_COUNT = 'luma_subscriber_count',
+  
+  // Email Newsletter metrics
+  EMAIL_NEWSLETTER_SIGNUP_COUNT = 'email_newsletter_signup_count'
+}
+
+export interface GrowthMetric {
+  id: string;
+  platform: PlatformType;
+  metric_type: MetricType;
+  metric_value: number;
+  metric_metadata: Record<string, any>;
+  recorded_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GrowthAnalytics {
+  id: string;
+  platform: PlatformType;
+  metric_type: MetricType;
+  current_value: number;
+  previous_value: number;
+  change_1d: number;
+  change_7d: number;
+  change_30d: number;
+  change_1y: number;
+  change_1d_percent: number;
+  change_7d_percent: number;
+  change_30d_percent: number;
+  change_1y_percent: number;
+  analytics_metadata: Record<string, any>;
+  calculated_at: string;
+  data_period_start: string;
+  data_period_end: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GrowthPlatformConfig {
+  id: string;
+  platform: PlatformType;
+  collection_enabled: boolean;
+  collection_interval_minutes: number;
+  api_config: Record<string, any>;
+  last_collected_at?: string;
+  last_collection_status: 'pending' | 'success' | 'error';
+  last_collection_error?: string;
+  platform_metadata: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface YouTubeVideoData {
+  title: string;
+  video_id: string;
+  url: string;
+  views: number;
+  impressions?: number;
+  published_at: string;
+  thumbnail_url?: string;
+}
+
+export interface YouTubeChannelData {
+  total_views: number;
+  total_impressions: number;
+  subscriber_count: number;
+  video_count: number;
+  top_videos: YouTubeVideoData[];
+}
+
+export interface LinkedInPageData {
+  follower_count: number;
+  page_views?: number;
+  engagement_rate?: number;
+}
+
+export interface LumaEventData {
+  page_views: number;
+  subscriber_count: number;
+  event_count: number;
+  total_attendees?: number;
+}
+
+export interface EmailNewsletterData {
+  signup_count: number;
+  total_subscribers?: number;
+  recent_signups?: number;
+  source_breakdown?: Record<string, number>;
+}
+
+export interface GrowthCollectionResult {
+  platform: PlatformType;
+  metrics_collected: Array<{
+    metric_type: MetricType;
+    value: number;
+    metadata?: Record<string, any>;
+  }>;
+  collection_timestamp: string;
+  success: boolean;
+  error?: string;
+}
+
+export interface MarketingDashboardData {
+  platform: PlatformType;
+  metric_type: MetricType;
+  current_value: number;
+  change_1d: number;
+  change_7d: number;
+  change_30d: number;
+  change_1y: number;
+  change_1d_percent: number;
+  change_7d_percent: number;
+  change_30d_percent: number;
+  change_1y_percent: number;
+  calculated_at: string;
+  trend_1d: 'up' | 'down' | 'stable';
+  trend_7d: 'up' | 'down' | 'stable';
+  trend_30d: 'up' | 'down' | 'stable';
 } 

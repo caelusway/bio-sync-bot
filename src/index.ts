@@ -1,6 +1,7 @@
 import { discordService } from '@/services/discord';
 import { telegramService } from '@/services/telegram';
 import { databaseService } from '@/services/database';
+import { growthTrackingService } from '@/services/growth'; // 🛡️ SAFE: New optional service
 import { server } from '@/server';
 import { logger } from '@/utils/logger';
 import { botConfig } from '@/config/bot';
@@ -38,6 +39,14 @@ class BotApplication {
 
       // Setup cleanup job
       this.setupCleanupJob();
+
+      // 🛡️ SAFE: Initialize growth tracking (only if enabled via env var)
+      try {
+        await growthTrackingService.initialize();
+      } catch (error) {
+        logger.warn('Growth tracking initialization failed (non-critical):', error);
+        // Don't let this break the main application
+      }
 
       logger.info('✅ BioDAO Multi-Platform Bot started successfully!');
       logger.info(`📊 Discord: Monitoring ${botConfig.categories.length} categories`);
@@ -173,6 +182,13 @@ class BotApplication {
       // Clear intervals
       if (this.cleanupInterval) {
         clearInterval(this.cleanupInterval);
+      }
+
+      // 🛡️ SAFE: Stop growth tracking service
+      try {
+        await growthTrackingService.shutdown();
+      } catch (error) {
+        logger.warn('Error stopping growth tracking service (non-critical):', error);
       }
 
       // Stop Discord bot

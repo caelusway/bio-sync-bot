@@ -1,0 +1,26 @@
+[Unit]
+Description=BioProtocol Growth Collector
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=node
+Group=node
+WorkingDirectory=/path/to/bio-sync-bot
+ExecStart=/usr/bin/npm run growth:build
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+# Logging
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=growth-collector
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

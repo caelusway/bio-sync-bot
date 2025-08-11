@@ -1,5 +1,20 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { DiscordMessage, ChannelStats, UserActivity, ServiceResponse, TelegramMessage, TelegramChatStats, TelegramUserActivity } from '@/types';
+import { 
+  DiscordMessage, 
+  ChannelStats, 
+  UserActivity, 
+  ServiceResponse, 
+  TelegramMessage, 
+  TelegramChatStats, 
+  TelegramUserActivity,
+  // Growth tracking types
+  PlatformType,
+  MetricType,
+  GrowthMetric,
+  GrowthAnalytics,
+  GrowthPlatformConfig,
+  MarketingDashboardData
+} from '@/types';
 import { botConfig } from '@/config/bot';
 import { logger } from '@/utils/logger';
 
@@ -622,6 +637,299 @@ export class DatabaseService {
       return { success: true, data: { deleted_count: deletedCount } };
     } catch (error) {
       logger.error('Unexpected error cleaning up old Telegram messages:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  // ================================
+  // GROWTH TRACKING METHODS
+  // 🛡️ PRODUCTION SAFE: Only additive methods, no changes to existing functionality
+  // ================================
+
+  /**
+   * Get total Discord message count (for growth tracking)
+   */
+  async getDiscordTotalMessageCount(): Promise<ServiceResponse<{ count: number }>> {
+    try {
+      const { count, error } = await this.supabase
+        .from('discord_messages')
+        .select('*', { count: 'exact', head: true });
+
+      if (error) {
+        logger.error('Failed to get Discord total message count:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      return { success: true, data: { count: count || 0 } };
+    } catch (error) {
+      logger.error('Unexpected error getting Discord total message count:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Get unique Discord member count (for growth tracking)
+   */
+  async getDiscordUniqueMemberCount(): Promise<ServiceResponse<{ count: number }>> {
+    try {
+      const { data, error } = await this.supabase
+        .from('discord_messages')
+        .select('author_id')
+        .not('author_id', 'is', null);
+
+      if (error) {
+        logger.error('Failed to get Discord unique member count:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      // Count unique author IDs
+      const uniqueAuthors = new Set((data || []).map(row => row.author_id));
+      
+      return { success: true, data: { count: uniqueAuthors.size } };
+    } catch (error) {
+      logger.error('Unexpected error getting Discord unique member count:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Get total Telegram message count (for growth tracking)
+   */
+  async getTelegramTotalMessageCount(): Promise<ServiceResponse<{ count: number }>> {
+    try {
+      const { count, error } = await this.supabase
+        .from('telegram_messages')
+        .select('*', { count: 'exact', head: true });
+
+      if (error) {
+        logger.error('Failed to get Telegram total message count:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      return { success: true, data: { count: count || 0 } };
+    } catch (error) {
+      logger.error('Unexpected error getting Telegram total message count:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Get unique Telegram member count (for growth tracking)
+   */
+  async getTelegramUniqueMemberCount(): Promise<ServiceResponse<{ count: number }>> {
+    try {
+      const { data, error } = await this.supabase
+        .from('telegram_messages')
+        .select('user_id')
+        .not('user_id', 'is', null);
+
+      if (error) {
+        logger.error('Failed to get Telegram unique member count:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      // Count unique user IDs
+      const uniqueUsers = new Set((data || []).map(row => row.user_id));
+      
+      return { success: true, data: { count: uniqueUsers.size } };
+    } catch (error) {
+      logger.error('Unexpected error getting Telegram unique member count:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Save growth metric data
+   */
+  async saveGrowthMetric(metric: Omit<GrowthMetric, 'id' | 'created_at' | 'updated_at'>): Promise<ServiceResponse<GrowthMetric>> {
+    try {
+      const { data, error } = await this.supabase
+        .rpc('upsert_growth_metric', {
+          p_platform: metric.platform,
+          p_metric_type: metric.metric_type,
+          p_metric_value: metric.metric_value,
+          p_metric_metadata: metric.metric_metadata,
+          p_recorded_at: metric.recorded_at
+        });
+
+      if (error) {
+        logger.error('Failed to save growth metric:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      logger.error('Unexpected error saving growth metric:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Calculate growth analytics for a platform and metric
+   */
+  async calculateGrowthAnalytics(platform: PlatformType, metricType: MetricType, calculationDate?: string): Promise<ServiceResponse<GrowthAnalytics>> {
+    try {
+      const { data, error } = await this.supabase
+        .rpc('calculate_growth_analytics', {
+          p_platform: platform,
+          p_metric_type: metricType,
+          p_calculation_date: calculationDate || new Date().toISOString()
+        });
+
+      if (error) {
+        logger.error('Failed to calculate growth analytics:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      logger.error('Unexpected error calculating growth analytics:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Get marketing dashboard data
+   */
+  async getMarketingDashboardData(): Promise<ServiceResponse<MarketingDashboardData[]>> {
+    try {
+      const { data, error } = await this.supabase
+        .from('v_marketing_dashboard')
+        .select('*')
+        .order('platform, metric_type');
+
+      if (error) {
+        logger.error('Failed to get marketing dashboard data:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      return { success: true, data: data || [] };
+    } catch (error) {
+      logger.error('Unexpected error getting marketing dashboard data:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Get growth analytics for a specific platform
+   */
+  async getPlatformGrowthAnalytics(platform: PlatformType): Promise<ServiceResponse<GrowthAnalytics[]>> {
+    try {
+      const { data, error } = await this.supabase
+        .from('growth_analytics')
+        .select('*')
+        .eq('platform', platform)
+        .order('metric_type, calculated_at', { ascending: false });
+
+      if (error) {
+        logger.error(`Failed to get growth analytics for ${platform}:`, error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      return { success: true, data: data || [] };
+    } catch (error) {
+      logger.error(`Unexpected error getting growth analytics for ${platform}:`, error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Get growth platform configurations
+   */
+  async getGrowthPlatformConfigs(): Promise<ServiceResponse<GrowthPlatformConfig[]>> {
+    try {
+      const { data, error } = await this.supabase
+        .from('growth_platform_configs')
+        .select('*')
+        .order('platform');
+
+      if (error) {
+        logger.error('Failed to get growth platform configs:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      return { success: true, data: data || [] };
+    } catch (error) {
+      logger.error('Unexpected error getting growth platform configs:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Update platform collection status
+   */
+  async updateGrowthPlatformCollectionStatus(
+    platform: PlatformType, 
+    status: 'pending' | 'success' | 'error', 
+    error?: string
+  ): Promise<ServiceResponse<GrowthPlatformConfig>> {
+    try {
+      const updateData: any = {
+        last_collection_status: status,
+        last_collected_at: new Date().toISOString()
+      };
+
+      if (error) {
+        updateData.last_collection_error = error;
+      }
+
+      const { data, error: updateError } = await this.supabase
+        .from('growth_platform_configs')
+        .update(updateData)
+        .eq('platform', platform)
+        .select()
+        .single();
+
+      if (updateError) {
+        logger.error(`Failed to update collection status for ${platform}:`, updateError);
+        return { success: false, error: updateError.message, code: updateError.code };
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      logger.error(`Unexpected error updating collection status for ${platform}:`, error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Get latest growth metrics (for quick dashboard queries)
+   */
+  async getLatestGrowthMetrics(): Promise<ServiceResponse<GrowthMetric[]>> {
+    try {
+      const { data, error } = await this.supabase
+        .from('v_latest_growth_metrics')
+        .select('*')
+        .order('platform, metric_type');
+
+      if (error) {
+        logger.error('Failed to get latest growth metrics:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      return { success: true, data: data || [] };
+    } catch (error) {
+      logger.error('Unexpected error getting latest growth metrics:', error);
+      return { success: false, error: 'Unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Get growth summary using database function
+   */
+  async getGrowthSummary(): Promise<ServiceResponse<any[]>> {
+    try {
+      const { data, error } = await this.supabase
+        .rpc('get_growth_summary');
+
+      if (error) {
+        logger.error('Failed to get growth summary:', error);
+        return { success: false, error: error.message, code: error.code };
+      }
+
+      return { success: true, data: data || [] };
+    } catch (error) {
+      logger.error('Unexpected error getting growth summary:', error);
       return { success: false, error: 'Unexpected error occurred' };
     }
   }

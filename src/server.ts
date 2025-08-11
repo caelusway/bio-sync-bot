@@ -3,6 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 import { healthCheck, readinessCheck, livenessCheck } from '@/handlers/health';
+// 🛡️ SAFE: Import new growth tracking handlers (completely optional)
+import * as growthHandlers from '@/handlers/growth';
 import { botConfig } from '@/config/bot';
 import { logger } from '@/utils/logger';
 import { databaseService } from '@/services/database';
@@ -366,6 +368,163 @@ export class Server {
       }
     });
 
+    // ================================
+    // GROWTH TRACKING API ENDPOINTS
+    // 🛡️ PRODUCTION SAFE: New endpoints that don't affect existing functionality
+    // ================================
+
+    // Marketing dashboard endpoint
+    this.app.get('/api/growth/dashboard', growthHandlers.getMarketingDashboard);
+    
+    // Platform-specific growth data
+    this.app.get('/api/growth/platform/:platform', growthHandlers.getPlatformGrowth);
+    
+    // Manual data collection triggers
+    this.app.post('/api/growth/collect', growthHandlers.triggerDataCollection);
+    this.app.post('/api/growth/collect/:platform', growthHandlers.triggerDataCollection);
+    
+    // Growth service status
+    this.app.get('/api/growth/status', growthHandlers.getGrowthStatus);
+    
+    // Latest metrics overview
+    this.app.get('/api/growth/metrics/latest', growthHandlers.getLatestMetrics);
+    
+    // Chart data endpoint (placeholder for future implementation)
+    this.app.get('/api/growth/metrics/chart', growthHandlers.getMetricsForChart);
+
+    // ================================
+    // WEBFLOW OAUTH2 ENDPOINTS
+    // 🛡️ PRODUCTION SAFE: OAuth2 flow for Webflow API integration
+    // ================================
+    
+    // Start OAuth2 flow - redirect to Webflow authorization
+    this.app.get('/auth/webflow', (_req, res) => {
+      const clientId = process.env['WEBFLOW_CLIENT_ID'];
+      
+      if (!clientId) {
+        return res.status(500).json({
+          error: 'Webflow client ID not configured',
+          message: 'WEBFLOW_CLIENT_ID environment variable is required'
+        });
+      }
+
+      const authUrl = `https://webflow.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=sites:read forms:read`;
+      
+      res.json({
+        success: true,
+        message: 'Visit the authorization URL to complete OAuth2 flow',
+        auth_url: authUrl,
+        instructions: [
+          '1. Visit the auth_url above',
+          '2. Authorize the application',
+          '3. You will be redirected back with access token',
+          '4. The access token will be automatically saved'
+        ]
+      });
+    });
+
+    // OAuth2 callback - handle authorization code and exchange for access token
+    this.app.get('/auth/webflow/callback', async (req, res) => {
+      try {
+        const { code, error } = req.query;
+
+        if (error) {
+          return res.status(400).json({
+            success: false,
+            error: 'Authorization failed',
+            details: error
+          });
+        }
+
+        if (!code) {
+          return res.status(400).json({
+            success: false,
+            error: 'Authorization code missing',
+            message: 'No authorization code received from Webflow'
+          });
+        }
+
+        const clientId = process.env['WEBFLOW_CLIENT_ID'];
+        const clientSecret = process.env['WEBFLOW_CLIENT_SECRET'];
+
+        if (!clientId || !clientSecret) {
+          return res.status(500).json({
+            success: false,
+            error: 'Webflow credentials not configured',
+            message: 'WEBFLOW_CLIENT_ID and WEBFLOW_CLIENT_SECRET are required'
+          });
+        }
+
+        // Exchange authorization code for access token
+        const tokenResponse = await fetch('https://api.webflow.com/oauth/access_token', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: new URLSearchParams({
+            client_id: clientId,
+            client_secret: clientSecret,
+            code: code as string,
+            grant_type: 'authorization_code'
+          })
+        });
+
+        if (!tokenResponse.ok) {
+          const errorData = await tokenResponse.text();
+          throw new Error(`Token exchange failed: ${tokenResponse.status} ${errorData}`);
+        }
+
+        const tokenData = await tokenResponse.json() as {
+          access_token?: string;
+          token_type?: string;
+          scope?: string;
+          error?: string;
+          error_description?: string;
+        };
+
+        if (tokenData.error) {
+          return res.status(400).json({
+            success: false,
+            error: 'Token exchange failed',
+            details: tokenData.error_description || tokenData.error
+          });
+        }
+
+        if (!tokenData.access_token) {
+          return res.status(500).json({
+            success: false,
+            error: 'No access token received'
+          });
+        }
+
+        // Success response with instructions
+        res.json({
+          success: true,
+          message: 'Webflow OAuth2 completed successfully!',
+          access_token: tokenData.access_token,
+          token_type: tokenData.token_type,
+          scope: tokenData.scope,
+          instructions: [
+            'Add this to your .env file:',
+            `WEBFLOW_ACCESS_TOKEN="${tokenData.access_token}"`,
+            '',
+            'Then restart your growth collector to start collecting email newsletter data:',
+            'npm run growth'
+          ]
+        });
+
+        logger.info('✅ Webflow OAuth2 completed successfully');
+        
+      } catch (error) {
+        logger.error('Webflow OAuth2 callback error:', error);
+        res.status(500).json({
+          success: false,
+          error: 'OAuth2 callback failed',
+          details: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    });
+
     // Home endpoint
     this.app.get('/', (_req, res) => {
       res.json({
@@ -391,7 +550,18 @@ export class Server {
           'GET /api/debug/categories',
           'GET /api/debug/channels',
           'POST /api/threads/force-join-all',
-          'POST /api/backfill/historical-messages'
+          'POST /api/backfill/historical-messages',
+          // Growth tracking endpoints
+          'GET /api/growth/dashboard',
+          'GET /api/growth/platform/:platform',
+          'POST /api/growth/collect',
+          'POST /api/growth/collect/:platform',
+          'GET /api/growth/status',
+          'GET /api/growth/metrics/latest',
+          'GET /api/growth/metrics/chart',
+          // Webflow OAuth2 endpoints
+          'GET /auth/webflow',
+          'GET /auth/webflow/callback'
         ],
         thread_storage_info: {
           description: 'Thread messages are stored with parent channel names',
