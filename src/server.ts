@@ -410,7 +410,7 @@ export class Server {
 
       const authUrl = `https://webflow.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=sites:read forms:read`;
       
-      res.json({
+      return res.json({
         success: true,
         message: 'Visit the authorization URL to complete OAuth2 flow',
         auth_url: authUrl,
@@ -498,7 +498,9 @@ export class Server {
         }
 
         // Success response with instructions
-        res.json({
+        logger.info('✅ Webflow OAuth2 completed successfully');
+        
+        return res.json({
           success: true,
           message: 'Webflow OAuth2 completed successfully!',
           access_token: tokenData.access_token,
@@ -512,12 +514,10 @@ export class Server {
             'npm run growth'
           ]
         });
-
-        logger.info('✅ Webflow OAuth2 completed successfully');
         
       } catch (error) {
         logger.error('Webflow OAuth2 callback error:', error);
-        res.status(500).json({
+        return res.status(500).json({
           success: false,
           error: 'OAuth2 callback failed',
           details: error instanceof Error ? error.message : 'Unknown error'
