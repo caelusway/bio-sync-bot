@@ -40,6 +40,10 @@ export interface TelegramMessage {
   message_type: string;
   category: TelegramMessageCategory;
   metadata: Record<string, any>;
+  // Community/Topics support
+  message_thread_id?: number;
+  is_topic_message?: boolean;
+  topic_name?: string;
   // Reply support
   reply_to_message_id?: string;
   reply_to_user_id?: string;
@@ -233,6 +237,7 @@ export interface TelegramChatStats {
   messages_this_week: number;
   last_message_at?: string;
   active_users_count: number;
+  member_count?: number;
   updated_at: string;
 }
 
@@ -298,6 +303,7 @@ export enum MetricType {
   
   // YouTube metrics
   YOUTUBE_TOTAL_VIEWS = 'youtube_total_views',
+  YOUTUBE_SUBSCRIBER_COUNT = 'youtube_subscriber_count',
   YOUTUBE_TOTAL_IMPRESSIONS = 'youtube_total_impressions',
   YOUTUBE_TOP_VIDEO_VIEWS = 'youtube_top_video_views',
   YOUTUBE_TOP_VIDEO_IMPRESSIONS = 'youtube_top_video_impressions',

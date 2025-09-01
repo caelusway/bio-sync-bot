@@ -443,6 +443,18 @@ export class TelegramService {
       metadata
     };
 
+    // Add Community/Topics support
+    if (message['message_thread_id']) {
+      telegramMessage.message_thread_id = message['message_thread_id'];
+      telegramMessage.is_topic_message = true;
+      // Try to get topic name from forum topic info
+      if (message['forum_topic_created']) {
+        telegramMessage.topic_name = message['forum_topic_created']['name'];
+      } else if (message['reply_to_message'] && message['reply_to_message']['forum_topic_created']) {
+        telegramMessage.topic_name = message['reply_to_message']['forum_topic_created']['name'];
+      }
+    }
+
     // Add optional fields only if they exist
     if (message.from!.username) telegramMessage.username = message.from!.username;
     if (message.from!.first_name) telegramMessage.first_name = message.from!.first_name;
@@ -513,6 +525,18 @@ export class TelegramService {
       stats.messages_today += 1;
       stats.messages_this_week += 1;
 
+      // Get current member count for groups/supergroups
+      if (chatConfig.type === 'group' || chatConfig.type === 'supergroup') {
+        try {
+          const memberCount = await this.getChatMemberCount(message.chat.id);
+          if (memberCount !== null) {
+            stats.member_count = memberCount;
+          }
+        } catch (error) {
+          logger.debug('Failed to get member count for chat:', chatConfig.id, error);
+        }
+      }
+
       await databaseService.updateTelegramChatStats(stats);
     } catch (error) {
       logger.error('Error updating chat stats:', error);
@@ -561,6 +585,19 @@ export class TelegramService {
 
   async getBot(): Promise<TelegramBot> {
     return this.bot;
+  }
+
+  async getChatMemberCount(chatId: number | string): Promise<number | null> {
+    try {
+      const count = await telegramRateLimiter.executeWithRetry(
+        () => this.bot.getChatMemberCount(chatId),
+        'get chat member count'
+      );
+      return count;
+    } catch (error) {
+      logger.debug('Failed to get chat member count:', error);
+      return null;
+    }
   }
 }
 

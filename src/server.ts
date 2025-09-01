@@ -410,8 +410,11 @@ export class Server {
 
       const scopes = 'sites:read forms:read';
       const encodedScopes = encodeURIComponent(scopes);
-      // Use production Railway URL for redirect URI
-      const redirectUri = 'https://bio-sync-bot-production.up.railway.app/auth/webflow/callback';
+      // Dynamic redirect URI based on environment
+      const baseUrl = process.env['NODE_ENV'] === 'production' 
+        ? 'https://bio-sync-bot-production.up.railway.app'
+        : 'http://localhost:3000';
+      const redirectUri = `${baseUrl}/auth/webflow/callback`;
       const authUrl = `https://webflow.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=${encodedScopes}&redirect_uri=${encodeURIComponent(redirectUri)}`;
       
       // Debug logging
